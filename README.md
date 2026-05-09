@@ -1,7 +1,7 @@
 # `@flute-payments/sdk`
 
-> **Status:** Pre-alpha. The public surface is locked but most methods
-> still throw `not implemented`. Track delivery in
+> **Status:** Phase 1 complete. Every method on the public surface is
+> wired and tested against the live API contracts. Track delivery in
 > [ARISE-1845](https://rwaapps.atlassian.net/browse/ARISE-1845).
 
 Official server-side TypeScript / Node.js SDK for the Flute payment
@@ -14,14 +14,14 @@ language SDK follows.
 
 19 methods across 5 modules, plus webhook signature verification:
 
-| Module | Methods |
-|---|---|
-| Session | `init`, `authenticate`, `getAccessToken`, `refreshAccessToken`, `clearStoredToken` |
-| Transactions | `list`, `retrieve`, `authorize`, `sale`, `void`, `capture`, `refund`, `calculateAmount` |
-| Payment Sessions | `create`, `retrieve`, `cancel` |
-| Settings | `getPaymentSettings` |
-| General | `getVersion` |
-| Webhooks | `verifySignature` |
+| Module           | Methods                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------- |
+| Session          | `init`, `authenticate`, `getAccessToken`, `refreshAccessToken`, `clearStoredToken`      |
+| Transactions     | `list`, `retrieve`, `authorize`, `sale`, `void`, `capture`, `refund`, `calculateAmount` |
+| Payment Sessions | `create`, `retrieve`, `cancel`                                                          |
+| Settings         | `getPaymentSettings`                                                                    |
+| General          | `getVersion`                                                                            |
+| Webhooks         | `verifySignature`                                                                       |
 
 **Out of scope for Phase 1:** ACH transactions, customers, subscriptions,
 invoices, quick payments, POS, devices, webhook management. They will
@@ -37,9 +37,6 @@ npm install @flute-payments/sdk
 
 ## Quick start
 
-> The block below describes the **target** developer experience.
-> The implementations land in Phase 1.
-
 ```ts
 import { Flute } from '@flute-payments/sdk';
 
@@ -49,22 +46,38 @@ const flute = new Flute({
   environment: 'sandbox', // or 'production'
 });
 
-// Run a sale.
-const tx = await flute.transactions.sale({
-  amount: 1099,
-  currency: 'USD',
-  paymentMethodToken: 'pm_…',
-});
+// 1) (optional) Surface bad credentials at boot, not on first sale.
+await flute.sessions.authenticate();
 
-// Verify an incoming webhook.
+// 2) Run a sale (auto-capture).
+const result = await flute.transactions.sale({
+  baseAmount: 100,
+  currencyCode: 'USD',
+  transactionDetails: {
+    cardData: {
+      paymentMethodDetails: {
+        cardNumber: '4111111111111111',
+        securityCode: '123',
+        expirationMonth: 12,
+        expirationYear: 2030,
+      },
+    },
+  },
+});
+console.log(result.transactionId, result.transactionStatus);
+
+// 3) Verify an incoming webhook (Express-style).
 const ok = flute.webhooks.verifySignature({
-  signatureHeader: req.headers['flute-signature'] as string,
-  idHeader: req.headers['flute-event-id'] as string,
-  timestampHeader: req.headers['flute-timestamp'] as string,
+  signatureHeader: req.headers['flute-webhook-signature'] as string,
+  idHeader: req.headers['flute-webhook-id'] as string,
+  timestampHeader: req.headers['flute-webhook-timestamp'] as string,
   rawRequestBody: rawBuffer, // raw bytes, NOT parsed JSON
   signatureSecret: process.env.FLUTE_WEBHOOK_SECRET!,
 });
 ```
+
+See the runnable [examples/](./examples) for the full
+authorize → capture → refund flow and a complete webhook handler.
 
 ## Public API surface
 
@@ -75,6 +88,7 @@ and may change without notice.
 
 - `Flute`
 - `MemoryTokenStorage`
+- `Sessions`
 
 ### Errors
 
@@ -89,14 +103,17 @@ and may change without notice.
 
 ### Types
 
-- `FluteConfig`
-- `FluteEnvironment`
-- `FluteErrorOptions`
-- `FluteApiErrorPayload`
-- `TokenStorage`
-- `StoredToken`
-- `VerifyWebhookSignatureInput`
-- `VerifyWebhookSignatureOptions`
+- `FluteConfig`, `FluteEnvironment`, `EnvironmentEndpoints`
+- `FluteErrorOptions`, `FluteApiErrorPayload`
+- `TokenStorage`, `StoredToken`
+- `Transaction`, `TransactionStatus`, `TransactionType`,
+  `ListTransactionsParams`, `ListTransactionsResponse`,
+  `AuthorizeTransactionParams`, `SaleTransactionParams`,
+  `CaptureTransactionParams`, `RefundTransactionParams`,
+  `CalculateAmountParams`, `CalculateAmountResponse`
+- `PaymentSession`, `PaymentSessionStatus`, `CreatePaymentSessionParams`
+- `PaymentSettings`
+- `VerifyWebhookSignatureInput`, `VerifyWebhookSignatureOptions`
 
 ### Utilities
 
@@ -132,9 +149,15 @@ across replicas:
 
 ```ts
 class RedisTokenStorage implements TokenStorage {
-  async get(key: string) { /* … */ }
-  async set(key: string, value) { /* … */ }
-  async delete(key: string) { /* … */ }
+  async get(key: string) {
+    /* … */
+  }
+  async set(key: string, value) {
+    /* … */
+  }
+  async delete(key: string) {
+    /* … */
+  }
 }
 
 const flute = new Flute({
@@ -146,10 +169,10 @@ const flute = new Flute({
 
 ## Environments
 
-| Environment | ISV API | Pay-Int API | OAuth |
-|---|---|---|---|
-| `sandbox` | `https://api.uat.arise.risewithaurora.com/isv-api` | `…/pay-int-api` | `…/identity` |
-| `production` | `https://api.arise.risewithaurora.com/isv-api` | `…/pay-int-api` | `…/identity` |
+| Environment  | ISV API                                            | Pay-Int API     | OAuth        |
+| ------------ | -------------------------------------------------- | --------------- | ------------ |
+| `sandbox`    | `https://api.uat.arise.risewithaurora.com/isv-api` | `…/pay-int-api` | `…/identity` |
+| `production` | `https://api.arise.risewithaurora.com/isv-api`     | `…/pay-int-api` | `…/identity` |
 
 Override any of these via `baseUrls` when targeting a preview ring or
 self-hosted mirror.
@@ -163,7 +186,9 @@ subclass for actionable handling:
 import { FluteApiError, FluteRateLimitError, FluteValidationError } from '@flute-payments/sdk';
 
 try {
-  await flute.transactions.sale({ /* … */ });
+  await flute.transactions.sale({
+    /* … */
+  });
 } catch (err) {
   if (err instanceof FluteValidationError) {
     // err.payload.errors holds the field-level details
@@ -181,6 +206,26 @@ The Arise/Flute API returns rich error envelopes with `correlationId`,
 `errorCode`, `title`, `cause`, `resolution`, and `documentationUrl` —
 the SDK preserves all of them on `error.payload` and surfaces
 `correlationId` / `requestId` directly on the error for support tickets.
+
+## Webhooks
+
+The Flute Notifications Service signs every delivery with HMAC-SHA256.
+Three headers travel together:
+
+| Header                     | Description                                                |
+| -------------------------- | ---------------------------------------------------------- |
+| `Flute-Webhook-ID`         | Unique delivery id (also used in the signature payload).   |
+| `Flute-Webhook-Timestamp`  | UNIX timestamp **in seconds**, as a string.                |
+| `Flute-Webhook-Signature`  | `v1,<base64(hmac-sha256(secret, "id.ts.body"))>`.          |
+
+`verifyWebhookSignature` returns a boolean and never throws on adversarial
+input. It enforces a 5-minute replay window by default
+(`toleranceSeconds: 300`); set `Number.POSITIVE_INFINITY` only if you
+intentionally re-process old events offline.
+
+Critical: pass the **raw request body** — re-serialising parsed JSON
+(`JSON.stringify(req.body)`) breaks the HMAC because key order and
+whitespace differ.
 
 ## Compatibility
 

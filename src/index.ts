@@ -9,6 +9,7 @@
 
 export { Flute } from './client.js';
 export type { FluteConfig, FluteEnvironment } from './client.js';
+export type { EnvironmentEndpoints } from './environment.js';
 
 export {
   FluteError,
@@ -22,11 +23,31 @@ export {
 } from './errors.js';
 export type { FluteErrorOptions, FluteApiErrorPayload } from './errors.js';
 
-export type {
-  TokenStorage,
-  StoredToken,
-} from './auth/storage.js';
+export type { TokenStorage, StoredToken } from './auth/storage.js';
 export { MemoryTokenStorage } from './auth/storage.js';
+export { Sessions } from './auth/sessions.js';
+
+export type {
+  Transaction,
+  TransactionStatus,
+  TransactionType,
+  ListTransactionsParams,
+  ListTransactionsResponse,
+  AuthorizeTransactionParams,
+  SaleTransactionParams,
+  CaptureTransactionParams,
+  RefundTransactionParams,
+  CalculateAmountParams,
+  CalculateAmountResponse,
+} from './resources/transactions.js';
+
+export type {
+  PaymentSession,
+  PaymentSessionStatus,
+  CreatePaymentSessionParams,
+} from './resources/paymentSessions.js';
+
+export type { PaymentSettings } from './resources/settings.js';
 
 export { verifyWebhookSignature } from './webhooks/verifySignature.js';
 export type {

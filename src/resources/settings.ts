@@ -1,7 +1,37 @@
 import type { ResourceConfig } from './_resourceConfig.js';
+import type { paths } from '../types/generated/isv-api-v2.js';
 
 /**
- * Settings resource — surface defined by ARISE-1845 Phase 1.
+ * Merchant payment configuration as exposed by the ISV API
+ * (`GET /v2/settings/payment-config`).
+ *
+ * Field semantics are documented inline by the OpenAPI spec; we re-export
+ * the wire shape verbatim so that consumers always see the freshest
+ * documentation as the spec evolves. We only rename `unknown`-typed
+ * shapes when absolutely needed.
+ *
+ * @public
+ */
+export type PaymentSettings = NonNullable<
+  paths['/v2/settings/payment-config']['get']['responses'][200]['content']['application/json']
+>;
+
+/**
+ * Per-request overrides accepted by every method of the Settings resource.
+ *
+ * @public
+ */
+export interface SettingsRequestOptions {
+  /** Override the default per-request timeout. */
+  readonly timeoutMs?: number;
+  /** Override the default retry count. */
+  readonly maxRetries?: number;
+  /** Cancel from outside the SDK. */
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * Read-only access to merchant-level payment configuration.
  *
  * @public
  */
@@ -11,25 +41,27 @@ export class SettingsResource {
   /** @internal */
   public constructor(config: ResourceConfig) {
     this.#config = config;
-    void this.#config;
   }
 
   /**
-   * Retrieve the merchant's payment configuration: accepted card brands,
-   * supported currencies, surcharge/cash-discount rules, and other
-   * processing rails.
+   * Retrieve the merchant payment configuration.
    *
-   * Spec endpoint: `GET /v2/settings/payment-config`.
+   * Required permission on the credential: `General Configurations`.
+   *
+   * @example
+   * ```ts
+   * const settings = await flute.settings.getPaymentSettings();
+   * console.log(settings.availableCurrencies, settings.maxTransactionAmount);
+   * ```
    */
-  public getPaymentSettings(): Promise<never> {
-    return notImplemented('settings.getPaymentSettings');
+  public async getPaymentSettings(options: SettingsRequestOptions = {}): Promise<PaymentSettings> {
+    const response = await this.#config.http.request<PaymentSettings>({
+      method: 'GET',
+      url: `${this.#config.baseUrls.isvApi}/v2/settings/payment-config`,
+      ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+      ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    });
+    return response.data;
   }
-}
-
-function notImplemented(method: string): Promise<never> {
-  return Promise.reject(
-    new Error(
-      `${method}() is not implemented yet. The Flute SDK is currently in Phase 0 (scaffolding). Track progress in ARISE-1845.`,
-    ),
-  );
 }

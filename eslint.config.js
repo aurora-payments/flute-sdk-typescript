@@ -33,10 +33,7 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-      '@typescript-eslint/dot-notation': [
-        'error',
-        { allowIndexSignaturePropertyAccess: true },
-      ],
+      '@typescript-eslint/dot-notation': ['error', { allowIndexSignaturePropertyAccess: true }],
       '@typescript-eslint/require-await': 'off',
       '@typescript-eslint/consistent-type-imports': [
         'error',
@@ -49,7 +46,7 @@ export default tseslint.config(
         { allowNumber: true, allowBoolean: true },
       ],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
-      eqeqeq: ['error', 'always'],
+      'eqeqeq': ['error', 'always'],
       'prefer-const': 'error',
     },
   },

@@ -1,6 +1,9 @@
 import { FluteConfigurationError } from './errors.js';
 import type { TokenStorage } from './auth/storage.js';
 import { MemoryTokenStorage } from './auth/storage.js';
+import { TokenManager } from './auth/tokenManager.js';
+import { Sessions } from './auth/sessions.js';
+import { HttpClient } from './internal/http.js';
 import { TransactionsResource } from './resources/transactions.js';
 import { PaymentSessionsResource } from './resources/paymentSessions.js';
 import { SettingsResource } from './resources/settings.js';
@@ -73,6 +76,13 @@ export interface FluteConfig {
    * Useful for identifying integrations in support tickets.
    */
   readonly userAgentSuffix?: string;
+
+  /**
+   * Override the global `fetch` implementation. Reserved for tests and
+   * for environments that must route every HTTP call through a
+   * specific agent (mTLS, proxy, etc.).
+   */
+  readonly fetch?: typeof globalThis.fetch;
 }
 
 /**
@@ -98,6 +108,9 @@ export interface FluteConfig {
  * @public
  */
 export class Flute {
+  /** Auth surface: explicit `init`/`authenticate`/token retrieval. */
+  public readonly sessions: Sessions;
+
   /** Transactions API: list / retrieve / authorize / sale / void / capture / refund / calculateAmount. */
   public readonly transactions: TransactionsResource;
 
@@ -110,17 +123,14 @@ export class Flute {
   /** Webhook utilities: signature verification. Stateless. */
   public readonly webhooks: WebhooksNamespace;
 
-  readonly #config: Required<Omit<FluteConfig, 'baseUrls' | 'logger' | 'userAgentSuffix'>> & {
-    readonly baseUrls: EnvironmentEndpoints;
-    readonly logger: FluteConfig['logger'];
-    readonly userAgentSuffix: string | undefined;
-  };
+  readonly #environment: FluteEnvironment;
+  readonly #baseUrls: EnvironmentEndpoints;
 
   public constructor(config: FluteConfig) {
-    if (!config.clientId || typeof config.clientId !== 'string') {
+    if (typeof config.clientId !== 'string' || config.clientId.length === 0) {
       throw new FluteConfigurationError('`clientId` is required and must be a non-empty string.');
     }
-    if (!config.clientSecret || typeof config.clientSecret !== 'string') {
+    if (typeof config.clientSecret !== 'string' || config.clientSecret.length === 0) {
       throw new FluteConfigurationError(
         '`clientSecret` is required and must be a non-empty string.',
       );
@@ -128,30 +138,44 @@ export class Flute {
 
     const environment: FluteEnvironment = config.environment ?? 'sandbox';
     const baseUrls = resolveEnvironment(environment, config.baseUrls);
+    const tokenStorage = config.tokenStorage ?? new MemoryTokenStorage();
 
-    this.#config = {
-      clientId: config.clientId,
-      clientSecret: config.clientSecret,
-      environment,
-      baseUrls,
+    const httpClient = new HttpClient({
       timeoutMs: config.timeoutMs ?? 30_000,
       maxRetries: config.maxRetries ?? 2,
-      tokenStorage: config.tokenStorage ?? new MemoryTokenStorage(),
-      logger: config.logger,
       userAgentSuffix: config.userAgentSuffix,
-    };
+      logger: config.logger,
+      ...(config.fetch !== undefined ? { fetchImpl: config.fetch } : {}),
+    });
 
-    // Resource instances are created lazily by their constructors; for now
-    // they're placeholders with throwing methods so consumers get a clear
-    // error if they try to use Phase 1+ features before they ship.
-    this.transactions = new TransactionsResource(this.#config);
-    this.paymentSessions = new PaymentSessionsResource(this.#config);
-    this.settings = new SettingsResource(this.#config);
+    const tokenManager = new TokenManager({
+      clientId: config.clientId,
+      clientSecret: config.clientSecret,
+      oauthBaseUrl: baseUrls.oauth,
+      storage: tokenStorage,
+      http: httpClient,
+    });
+
+    httpClient.setAuth(tokenManager);
+
+    const resourceConfig = { baseUrls, http: httpClient };
+
+    this.#environment = environment;
+    this.#baseUrls = baseUrls;
+    this.sessions = new Sessions(tokenManager);
+    this.transactions = new TransactionsResource(resourceConfig);
+    this.paymentSessions = new PaymentSessionsResource(resourceConfig);
+    this.settings = new SettingsResource(resourceConfig);
     this.webhooks = new WebhooksNamespace();
   }
 
   /** Currently configured environment. Read-only. */
   public get environment(): FluteEnvironment {
-    return this.#config.environment;
+    return this.#environment;
+  }
+
+  /** Resolved base URLs in use. Read-only. Useful for diagnostics and tests. */
+  public get baseUrls(): EnvironmentEndpoints {
+    return this.#baseUrls;
   }
 }

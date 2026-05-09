@@ -6,6 +6,13 @@
 export interface StoredToken {
   /** Bearer JWT issued by the OAuth `/token` endpoint. */
   readonly accessToken: string;
+  /**
+   * Refresh token issued together with the access token. The Identity
+   * Service grants one for every `client_credentials` exchange (because
+   * `offline_access` is set by default). The SDK will use it to extend
+   * a session without re-sending the client secret over the wire.
+   */
+  readonly refreshToken?: string;
   /** Absolute UNIX millisecond timestamp at which `accessToken` becomes invalid. */
   readonly expiresAt: number;
   /** Optional token type (always `Bearer` in practice). */
@@ -38,26 +45,28 @@ export interface TokenStorage {
 /**
  * In-process, non-persistent storage. The default for {@link Flute}.
  *
+ * The storage is intentionally a dumb container: it never evicts on its
+ * own. Lifetime decisions (refresh proactively, fall back when the
+ * refresh token is rejected, etc.) all live in `TokenManager`. That way
+ * the storage interface stays uniform across `MemoryTokenStorage`,
+ * Redis, KV, file-system, etc.
+ *
  * @public
  */
 export class MemoryTokenStorage implements TokenStorage {
   readonly #store = new Map<string, StoredToken>();
 
-  public async get(key: string): Promise<StoredToken | undefined> {
-    const value = this.#store.get(key);
-    if (value === undefined) return undefined;
-    if (value.expiresAt <= Date.now()) {
-      this.#store.delete(key);
-      return undefined;
-    }
-    return value;
+  public get(key: string): Promise<StoredToken | undefined> {
+    return Promise.resolve(this.#store.get(key));
   }
 
-  public async set(key: string, value: StoredToken): Promise<void> {
+  public set(key: string, value: StoredToken): Promise<void> {
     this.#store.set(key, value);
+    return Promise.resolve();
   }
 
-  public async delete(key: string): Promise<void> {
+  public delete(key: string): Promise<void> {
     this.#store.delete(key);
+    return Promise.resolve();
   }
 }

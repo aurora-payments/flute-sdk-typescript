@@ -19,16 +19,16 @@ npm run verify
 
 ## Local workflow
 
-| Goal | Command |
-|---|---|
-| Build (ESM + CJS + types) | `npm run build` |
-| Unit tests | `npm test` |
-| Watch tests | `npm run test:watch` |
-| Coverage | `npm run test:coverage` |
-| Lint | `npm run lint` (auto-fix: `npm run lint:fix`) |
-| Format | `npm run format` |
-| Typecheck only | `npm run typecheck` |
-| Everything before pushing | `npm run verify` |
+| Goal                      | Command                                       |
+| ------------------------- | --------------------------------------------- |
+| Build (ESM + CJS + types) | `npm run build`                               |
+| Unit tests                | `npm test`                                    |
+| Watch tests               | `npm run test:watch`                          |
+| Coverage                  | `npm run test:coverage`                       |
+| Lint                      | `npm run lint` (auto-fix: `npm run lint:fix`) |
+| Format                    | `npm run format`                              |
+| Typecheck only            | `npm run typecheck`                           |
+| Everything before pushing | `npm run verify`                              |
 
 ## Commit style
 

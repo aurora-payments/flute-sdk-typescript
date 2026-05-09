@@ -12,7 +12,8 @@ export function getVersion(): string {
 }
 
 const SDK_VERSION: string =
-  typeof globalThis.__FLUTE_SDK_VERSION__ === 'string' && globalThis.__FLUTE_SDK_VERSION__.length > 0
+  typeof globalThis.__FLUTE_SDK_VERSION__ === 'string' &&
+  globalThis.__FLUTE_SDK_VERSION__.length > 0
     ? globalThis.__FLUTE_SDK_VERSION__
     : '0.0.0-dev';
 
