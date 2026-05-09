@@ -1,0 +1,13 @@
+# Default — every PR requires review by the SDK platform team.
+*           @aurora-payments/sdk-platform
+
+# Public surface needs DX review.
+src/index.ts                @aurora-payments/sdk-platform @aurora-payments/dx
+src/client.ts               @aurora-payments/sdk-platform @aurora-payments/dx
+
+# Auth/security-critical paths require security sign-off.
+src/auth/                   @aurora-payments/sdk-platform @aurora-payments/security
+src/webhooks/               @aurora-payments/sdk-platform @aurora-payments/security
+
+# CI/CD and release infra.
+.github/                    @aurora-payments/sdk-platform @aurora-payments/devops

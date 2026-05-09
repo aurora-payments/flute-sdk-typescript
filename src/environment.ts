@@ -1,0 +1,57 @@
+import type { FluteEnvironment } from './client.js';
+
+/**
+ * Resolved set of base URLs the SDK talks to.
+ *
+ * Phase 1 surface targets two prefixes:
+ *
+ * - `isvApi` — the ISV BFF v2 (transactions, settings).
+ * - `payIntApi` — the Payment Integrations API (payment sessions),
+ *   which still lives under v1 paths at the time this SDK ships.
+ * - `oauth` — the Identity Service token endpoint.
+ *
+ * @internal
+ */
+export interface EnvironmentEndpoints {
+  /** Base URL for the ISV API BFF (v2). */
+  readonly isvApi: string;
+  /** Base URL for the Payment Integrations API (v1) — payment sessions live here. */
+  readonly payIntApi: string;
+  /** Base URL for the Identity Service OAuth token endpoint. */
+  readonly oauth: string;
+}
+
+const SANDBOX_DEFAULTS: EnvironmentEndpoints = {
+  isvApi: 'https://api.uat.arise.risewithaurora.com/isv-api',
+  payIntApi: 'https://api.uat.arise.risewithaurora.com/pay-int-api',
+  oauth: 'https://api.uat.arise.risewithaurora.com/identity',
+};
+
+const PRODUCTION_DEFAULTS: EnvironmentEndpoints = {
+  isvApi: 'https://api.arise.risewithaurora.com/isv-api',
+  payIntApi: 'https://api.arise.risewithaurora.com/pay-int-api',
+  oauth: 'https://api.arise.risewithaurora.com/identity',
+};
+
+/**
+ * Merge per-environment defaults with user overrides. Trailing slashes
+ * are normalised away so callers can append `/v2/transactions` cleanly.
+ *
+ * @internal
+ */
+export function resolveEnvironment(
+  environment: FluteEnvironment,
+  overrides: Partial<EnvironmentEndpoints> | undefined,
+): EnvironmentEndpoints {
+  const defaults = environment === 'production' ? PRODUCTION_DEFAULTS : SANDBOX_DEFAULTS;
+  const merged: EnvironmentEndpoints = {
+    isvApi: stripTrailingSlash(overrides?.isvApi ?? defaults.isvApi),
+    payIntApi: stripTrailingSlash(overrides?.payIntApi ?? defaults.payIntApi),
+    oauth: stripTrailingSlash(overrides?.oauth ?? defaults.oauth),
+  };
+  return merged;
+}
+
+function stripTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url.slice(0, -1) : url;
+}
