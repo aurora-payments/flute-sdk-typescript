@@ -212,11 +212,11 @@ the SDK preserves all of them on `error.payload` and surfaces
 The Flute Notifications Service signs every delivery with HMAC-SHA256.
 Three headers travel together:
 
-| Header                     | Description                                                |
-| -------------------------- | ---------------------------------------------------------- |
-| `Flute-Webhook-ID`         | Unique delivery id (also used in the signature payload).   |
-| `Flute-Webhook-Timestamp`  | UNIX timestamp **in seconds**, as a string.                |
-| `Flute-Webhook-Signature`  | `v1,<base64(hmac-sha256(secret, "id.ts.body"))>`.          |
+| Header                    | Description                                              |
+| ------------------------- | -------------------------------------------------------- |
+| `Flute-Webhook-ID`        | Unique delivery id (also used in the signature payload). |
+| `Flute-Webhook-Timestamp` | UNIX timestamp **in seconds**, as a string.              |
+| `Flute-Webhook-Signature` | `v1,<base64(hmac-sha256(secret, "id.ts.body"))>`.        |
 
 `verifyWebhookSignature` returns a boolean and never throws on adversarial
 input. It enforces a 5-minute replay window by default
