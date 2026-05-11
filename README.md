@@ -228,10 +228,16 @@ try {
 
 ## How to test it
 
-Three complementary ways to validate the SDK end-to-end. All commands
-assume you're at the repo root.
+Four complementary ways to validate the SDK. **No path requires .NET
+Aspire or a local backend** — the SDK is the client only. Pick the
+level of rigour you need.
 
-### A. Run the unit / contract test suite (no credentials required)
+> **Reviewers:** if you're a member of the Aurora GitHub org you
+> already have read access to this repo; you don't need any extra
+> grant. Just clone and run the steps below. Author your code review
+> from the GitHub PR UI as usual.
+
+### A. Run the unit / contract test suite (no credentials, no network)
 
 The test pack uses [MSW](https://mswjs.io/) to mock every HTTP call so
 the suite is hermetic and runs in milliseconds. It covers happy paths,
@@ -239,12 +245,15 @@ the error hierarchy, retry behaviour, token coalescing, and webhook
 verification (including a backend cross-check vector).
 
 ```bash
+git clone https://github.com/aurora-payments/flute-sdk-typescript.git
+cd flute-sdk-typescript
+nvm use                  # picks up Node 22.13 from .nvmrc (or 20.19+/24.x)
 npm install
-npm run verify           # lint • typecheck • test • build
+npm run verify           # lint • typecheck • test • build (~5 s)
 # or step-by-step:
 npm run lint
 npm run typecheck
-npm run test             # 84 tests, ~1s
+npm run test             # 90 tests, ~1 s
 npm run test:coverage    # generates ./coverage/, fails below 80% / 75%
 npm run build            # ESM + CJS + .d.ts in ./dist
 ```
@@ -304,6 +313,40 @@ If you want to use it as a Git dependency (pre-release or fork):
 ```bash
 npm install github:aurora-payments/flute-sdk-typescript#main
 ```
+
+### D. (Optional) Run examples against your local Aspire backend
+
+Only useful if you're actively developing the Arise backend locally. The
+SDK does not require Aspire — UAT (Path B) is the canonical target and
+covers everything. Use this path when you're testing a backend change
+and the SDK in tandem.
+
+1. In a separate shell, start Aspire from `arise-backend`:
+
+   ```bash
+   cd ../arise-backend
+   dotnet run --project Arise.Aspire/Arise.Aspire.AppHost
+   ```
+
+   Note the loopback URLs Aspire prints for the ISV API, Payment
+   Integrations API, and Identity Service. They look like
+   `http://localhost:50xx`.
+
+2. In the SDK repo, point an example at those loopback URLs by setting
+   the `baseUrls` override in your script (or duplicate
+   `examples/01-quickstart.ts` and patch the constructor). See the
+   [Pointing at Aspire](#pointing-the-sdk-at-a-backend-you-run-locally-aspire)
+   section under [Environments](#environments).
+
+3. Run the example as in Path B:
+
+   ```bash
+   FLUTE_CLIENT_ID="local-dev" FLUTE_CLIENT_SECRET="local-dev" \
+     npx tsx examples/01-quickstart.ts
+   ```
+
+The HTTPS guard is automatically lifted for `localhost` / `127.0.0.1` /
+`[::1]`, so no extra config is needed.
 
 ### What "passing" means
 
@@ -445,14 +488,116 @@ const flute = new Flute({
 
 ## Environments
 
+The SDK ships with two named environments. The token endpoint is always
+`${oauth}/oauth2/token` (PRD §FR-2.2). HTTPS is enforced on every base
+URL except `localhost` / `127.0.0.1` / `[::1]`, which the SDK accepts
+over plain HTTP for local development.
+
 | Environment  | ISV API                                            | Pay-Int API                                            | OAuth                                        |
 | ------------ | -------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------- |
 | `sandbox`    | `https://api.uat.arise.risewithaurora.com/isv-api` | `https://api.uat.arise.risewithaurora.com/pay-int-api` | `https://oauth.uat.arise.risewithaurora.com` |
 | `production` | `https://api.arise.risewithaurora.com/isv-api`     | `https://api.arise.risewithaurora.com/pay-int-api`     | `https://oauth.arise.risewithaurora.com`     |
 
-The token endpoint is `${oauth}/oauth2/token` (PRD §FR-2.2). HTTPS is
-enforced for every base URL except `localhost` / `127.0.0.1`, which the
-SDK accepts over plain HTTP for contract tests.
+### When to use which
+
+| You want to…                                                          | Use                                                |
+| --------------------------------------------------------------------- | -------------------------------------------------- |
+| Develop locally / run automated tests / demo the SDK with fake cards. | `sandbox`                                          |
+| Run E2E in your staging environment with real (low-stakes) money.     | `sandbox`                                          |
+| Charge real cards in production.                                      | `production`                                       |
+| Hit a backend you've spun up locally with Aspire.                     | custom `baseUrls` pointing at loopback (see below) |
+| Hit a feature-branch / preview ring deployed by platform engineering. | custom `baseUrls` pointing at the preview host     |
+
+Sandbox credentials and production credentials are **separate** —
+sandbox `clientId` / `clientSecret` will not work against production
+and vice-versa. Provision each pair from the matching dashboard.
+
+### Sandbox
+
+```ts
+import { Environment, Flute } from '@flute-payments/sdk';
+
+const flute = new Flute({
+  clientId: process.env.FLUTE_CLIENT_ID!,
+  clientSecret: process.env.FLUTE_CLIENT_SECRET!,
+  environment: Environment.Sandbox, // also accepts the string 'sandbox'
+});
+```
+
+**Test cards** (UAT processor accepts the standard Visa/MC test PANs):
+
+| Brand      | PAN                   | CVV    | Expiry           |
+| ---------- | --------------------- | ------ | ---------------- |
+| Visa       | `4111 1111 1111 1111` | `123`  | any future month |
+| Mastercard | `5555 5555 5555 4444` | `123`  | any future month |
+| Amex       | `3782 822463 10005`   | `1234` | any future month |
+| Discover   | `6011 1111 1111 1117` | `123`  | any future month |
+
+The dashboard exposes additional PANs for declined / 3DS / AVS-fail
+scenarios — copy them from the merchant test guide.
+
+### Production
+
+```ts
+import { Environment, Flute } from '@flute-payments/sdk';
+
+const flute = new Flute({
+  clientId: process.env.FLUTE_CLIENT_ID!,
+  clientSecret: process.env.FLUTE_CLIENT_SECRET!,
+  environment: Environment.Production, // or 'production'
+});
+```
+
+> Production charges real cards. Always boot with
+> `await flute.sessions.authenticate()` in your deploy smoke-test so
+> bad credentials surface before the first sale, not on a customer's
+> checkout.
+
+### Pointing the SDK at a backend you run locally (Aspire)
+
+If you're developing the Arise backend locally with **.NET Aspire** and
+want the SDK to hit those services instead of UAT, override `baseUrls`
+with the loopback URLs Aspire exposes. Aspire prints them on startup
+under the dashboard's Resources tab.
+
+```ts
+const flute = new Flute({
+  clientId: 'local-dev-client',
+  clientSecret: 'local-dev-secret',
+  environment: 'sandbox', // ignored when every baseUrls.* is set, but required
+  baseUrls: {
+    isvApi: 'http://localhost:5001/isv-api',
+    payIntApi: 'http://localhost:5002/pay-int-api',
+    oauth: 'http://localhost:5003', // Identity Service base
+  },
+  // Aspire often serves with a self-signed cert; HTTP loopback skips
+  // that whole conversation. The SDK's HTTPS guard exempts loopback.
+});
+```
+
+> The SDK is the **client only** — it does not bring up Aspire for you.
+> Start Aspire separately with `dotnet run --project Arise.Aspire/Arise.Aspire.AppHost`
+> (or whichever AppHost project applies), wait for the dashboard to
+> show the services healthy, and then run your SDK example.
+
+### Pointing at a preview ring or self-hosted mirror
+
+Same shape, just substitute the URLs platform engineering gives you:
+
+```ts
+const flute = new Flute({
+  clientId: '…',
+  clientSecret: '…',
+  baseUrls: {
+    isvApi: 'https://api.preview-foo.arise.risewithaurora.com/isv-api',
+    payIntApi: 'https://api.preview-foo.arise.risewithaurora.com/pay-int-api',
+    oauth: 'https://oauth.preview-foo.arise.risewithaurora.com',
+  },
+});
+```
+
+Partial overrides work too — pass only the URLs you want to swap and
+the SDK keeps the rest of the chosen `environment` defaults.
 
 ## Errors
 

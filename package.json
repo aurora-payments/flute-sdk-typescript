@@ -15,15 +15,15 @@
     "aurora",
     "aurora-payments"
   ],
-  "homepage": "https://github.com/flute-payments/flute-sdk-typescript#readme",
+  "homepage": "https://github.com/aurora-payments/flute-sdk-typescript#readme",
   "bugs": {
-    "url": "https://github.com/flute-payments/flute-sdk-typescript/issues"
+    "url": "https://github.com/aurora-payments/flute-sdk-typescript/issues"
   },
   "license": "MIT",
   "author": "Aurora Payments / Flute",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/flute-payments/flute-sdk-typescript.git"
+    "url": "git+https://github.com/aurora-payments/flute-sdk-typescript.git"
   },
   "type": "module",
   "main": "./dist/index.cjs",
