@@ -1,5 +1,5 @@
 /**
- * `@flute-payments/sdk` — Official server-side SDK for the Flute payment platform.
+ * `@getflute/sdk` — Official server-side SDK for the Flute payment platform.
  *
  * Public API surface. Anything not re-exported here is considered internal
  * and may change without a semver bump. Treat this file as the contract.

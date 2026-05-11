@@ -127,7 +127,7 @@ export interface FluteConfig {
  *
  * @example
  * ```ts
- * import { Flute } from '@flute-payments/sdk';
+ * import { Flute } from '@getflute/sdk';
  *
  * const flute = new Flute({
  *   clientId: process.env.FLUTE_CLIENT_ID!,

@@ -1,6 +1,6 @@
 # Changesets
 
-This folder is used by [changesets](https://github.com/changesets/changesets) to track pending releases for `@flute-payments/sdk`.
+This folder is used by [changesets](https://github.com/changesets/changesets) to track pending releases for `@getflute/sdk`.
 
 When you make a user-facing change, run:
 
