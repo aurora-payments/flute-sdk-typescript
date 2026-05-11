@@ -8,7 +8,7 @@ we hold this repo to a high bar.
 
 ## Prerequisites
 
-- Node.js `>=18.17.0` (the `.nvmrc` pins `20`)
+- Node.js `>=20.19.0` (the `.nvmrc` pins `22.13`)
 - `npm` (lockfile is `package-lock.json`)
 
 ```bash

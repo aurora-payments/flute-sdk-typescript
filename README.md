@@ -33,7 +33,7 @@ follow in later releases (see ARISE-1845 for the roadmap).
 npm install @flute-payments/sdk
 ```
 
-> Requires Node `>=18.17.0`.
+> Requires Node `>=20.19.0`.
 
 ## Quick start
 
@@ -229,7 +229,8 @@ whitespace differ.
 
 ## Compatibility
 
-- Node `>=18.17.0` (uses `fetch`, `AbortController`, `crypto.subtle`)
+- Node `>=20.19.0` (uses native `fetch`, `AbortController`, `crypto.subtle`)
+- CI runs on Node 20.19, 22.13, and 24.13
 - TypeScript `>=5.0` recommended for full type fidelity
 - ESM and CommonJS dual entrypoints
 
