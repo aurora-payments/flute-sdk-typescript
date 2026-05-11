@@ -33,6 +33,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify generated types are in sync with the OpenAPI spec
+        run: |
+          npm run openapi:types
+          git diff --exit-code -- src/types/generated/ \
+            || (echo "::error::Committed generated types differ from openapi/*.json. Run 'npm run openapi:types' and commit the result." && exit 1)
+
       - name: Lint
         run: npm run lint
 
