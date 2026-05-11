@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  Environment,
   Flute,
   FluteApiError,
   FluteAuthenticationError,
@@ -10,6 +11,7 @@ import {
   FluteNetworkError,
   FluteRateLimitError,
   FluteValidationError,
+  FluteWebhookError,
   MemoryTokenStorage,
   Sessions,
   getVersion,
@@ -40,21 +42,22 @@ describe('Construction', () => {
     ).toThrow(FluteConfigurationError);
   });
 
-  it('defaults to sandbox environment', () => {
+  it('defaults to sandbox environment with the right OAuth host (PRD §FR-2.2)', () => {
     const flute = new Flute({ clientId: 'cid', clientSecret: 'shh' });
     expect(flute.environment).toBe('sandbox');
-    expect(flute.baseUrls.isvApi).toContain('api.uat.arise');
-    expect(flute.baseUrls.oauth).toContain('api.uat.arise');
+    expect(flute.baseUrls.isvApi).toBe('https://api.uat.arise.risewithaurora.com/isv-api');
+    expect(flute.baseUrls.oauth).toBe('https://oauth.uat.arise.risewithaurora.com');
   });
 
-  it('respects the explicit environment', () => {
+  it('uses the production OAuth host when environment is production', () => {
     const flute = new Flute({
       clientId: 'cid',
       clientSecret: 'shh',
-      environment: 'production',
+      environment: Environment.Production,
     });
     expect(flute.environment).toBe('production');
-    expect(flute.baseUrls.isvApi).not.toContain('uat');
+    expect(flute.baseUrls.isvApi).toBe('https://api.arise.risewithaurora.com/isv-api');
+    expect(flute.baseUrls.oauth).toBe('https://oauth.arise.risewithaurora.com');
   });
 
   it('honours per-environment URL overrides', () => {
@@ -66,6 +69,71 @@ describe('Construction', () => {
       },
     });
     expect(flute.baseUrls.isvApi).toBe('https://example.test/isv-api');
+  });
+
+  it('rejects non-HTTPS base URLs except loopback (NFR-1)', () => {
+    expect(
+      () =>
+        new Flute({
+          clientId: 'cid',
+          clientSecret: 'shh',
+          baseUrls: { isvApi: 'http://api.example.com' },
+        }),
+    ).toThrow(FluteConfigurationError);
+
+    // Loopback HTTP is allowed for tests / contract servers.
+    const flute = new Flute({
+      clientId: 'cid',
+      clientSecret: 'shh',
+      baseUrls: {
+        isvApi: 'http://localhost:9000',
+        payIntApi: 'http://127.0.0.1:9001',
+        oauth: 'http://localhost:9002',
+      },
+    });
+    expect(flute.baseUrls.isvApi).toBe('http://localhost:9000');
+  });
+
+  it('rejects malformed base URLs', () => {
+    expect(
+      () =>
+        new Flute({
+          clientId: 'cid',
+          clientSecret: 'shh',
+          baseUrls: { isvApi: 'not a url' },
+        }),
+    ).toThrow(FluteConfigurationError);
+  });
+
+  it('validates timeout / retries / refresh-buffer numeric inputs', () => {
+    expect(() => new Flute({ clientId: 'c', clientSecret: 's', timeoutMs: -1 })).toThrow(
+      FluteConfigurationError,
+    );
+    expect(() => new Flute({ clientId: 'c', clientSecret: 's', maxRetries: -1 })).toThrow(
+      FluteConfigurationError,
+    );
+    expect(() => new Flute({ clientId: 'c', clientSecret: 's', maxRetries: 1.5 })).toThrow(
+      FluteConfigurationError,
+    );
+    expect(
+      () =>
+        new Flute({
+          clientId: 'c',
+          clientSecret: 's',
+          tokenRefreshBufferSeconds: -10,
+        }),
+    ).toThrow(FluteConfigurationError);
+  });
+
+  it('exposes Environment as a typed const enum', () => {
+    expect(Environment.Sandbox).toBe('sandbox');
+    expect(Environment.Production).toBe('production');
+    const flute = new Flute({
+      clientId: 'c',
+      clientSecret: 's',
+      environment: Environment.Sandbox,
+    });
+    expect(flute.environment).toBe('sandbox');
   });
 
   it('exposes all five namespaces as public properties', () => {
@@ -87,14 +155,19 @@ describe('Error hierarchy', () => {
     expect(new FluteNetworkError('x')).toBeInstanceOf(FluteError);
     expect(new FluteRateLimitError('x', undefined)).toBeInstanceOf(FluteError);
     expect(new FluteIdempotencyError('x')).toBeInstanceOf(FluteError);
+    expect(new FluteWebhookError('x')).toBeInstanceOf(FluteError);
   });
 
   it('preserves request and correlation ids', () => {
-    const err = new FluteApiError('Boom', { errorCode: 'X1' }, {
-      httpStatus: 500,
-      requestId: 'req_1',
-      correlationId: 'corr_1',
-    });
+    const err = new FluteApiError(
+      'Boom',
+      { errorCode: 'X1' },
+      {
+        httpStatus: 500,
+        requestId: 'req_1',
+        correlationId: 'corr_1',
+      },
+    );
     expect(err.httpStatus).toBe(500);
     expect(err.requestId).toBe('req_1');
     expect(err.correlationId).toBe('corr_1');

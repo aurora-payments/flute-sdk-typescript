@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { FluteWebhookError } from '../errors.js';
 
 /**
  * Inputs for {@link verifyWebhookSignature}.
@@ -58,6 +59,24 @@ const SUPPORTED_SCHEME = 'v1';
 /**
  * Verify the HMAC signature of an incoming webhook request.
  *
+ * Two call shapes are supported (PRD §FR-4.1):
+ *
+ * 1. **Object form (preferred, idiomatic TypeScript):**
+ *    ```ts
+ *    verifyWebhookSignature({
+ *      signatureHeader, idHeader, timestampHeader,
+ *      rawRequestBody, signatureSecret,
+ *    });
+ *    ```
+ * 2. **Positional form (PRD literal, useful when porting from other
+ *    Flute SDKs):**
+ *    ```ts
+ *    verifyWebhookSignature(
+ *      signatureHeader, idHeader, timestampHeader,
+ *      rawRequestBody, signatureSecret,
+ *    );
+ *    ```
+ *
  * Returns `true` when:
  *
  * 1. The `Flute-Webhook-Signature` header parses as `v1,<base64>`.
@@ -65,16 +84,51 @@ const SUPPORTED_SCHEME = 'v1';
  *    decoded signature byte-for-byte (timing-safe compare).
  * 3. The timestamp is within `toleranceSeconds` of the current clock.
  *
- * Returns `false` otherwise — never throws on adversarial input. This
- * matches the contract documented for the iOS SDK and lets ISVs treat
- * verification as a pure boolean.
+ * Returns `false` for any cryptographic mismatch, expired timestamp,
+ * malformed scheme, or non-base64 signature payload.
+ *
+ * Throws {@link FluteWebhookError} when verification cannot be attempted
+ * at all — i.e. a required parameter is missing, not a string, or empty.
+ * Per PRD §FR-4.3, this distinction lets the caller respond with `400`
+ * (client mistake) vs `401` (signature failure).
  *
  * @public
  */
 export function verifyWebhookSignature(
   input: VerifyWebhookSignatureInput,
-  options: VerifyWebhookSignatureOptions = {},
+  options?: VerifyWebhookSignatureOptions,
+): boolean;
+export function verifyWebhookSignature(
+  signatureHeader: string,
+  idHeader: string,
+  timestampHeader: string,
+  rawRequestBody: string | Uint8Array,
+  signatureSecret: string,
+  options?: VerifyWebhookSignatureOptions,
+): boolean;
+export function verifyWebhookSignature(
+  inputOrSignature: VerifyWebhookSignatureInput | string,
+  optionsOrIdHeader?: VerifyWebhookSignatureOptions | string,
+  timestampHeader?: string,
+  rawRequestBody?: string | Uint8Array,
+  signatureSecret?: string,
+  positionalOptions?: VerifyWebhookSignatureOptions,
 ): boolean {
+  const { input, options } = normaliseArgs(
+    inputOrSignature,
+    optionsOrIdHeader,
+    timestampHeader,
+    rawRequestBody,
+    signatureSecret,
+    positionalOptions,
+  );
+
+  assertNonEmptyString(input.signatureHeader, 'signatureHeader');
+  assertNonEmptyString(input.idHeader, 'idHeader');
+  assertNonEmptyString(input.timestampHeader, 'timestampHeader');
+  assertNonEmptyString(input.signatureSecret, 'signatureSecret');
+  assertRawBody(input.rawRequestBody);
+
   const expectedSignature = parseSignatureHeader(input.signatureHeader);
   if (expectedSignature === undefined) return false;
 
@@ -98,8 +152,81 @@ export function verifyWebhookSignature(
   return safeCompare(computed, expectedSignature);
 }
 
+function normaliseArgs(
+  inputOrSignature: VerifyWebhookSignatureInput | string,
+  optionsOrIdHeader: VerifyWebhookSignatureOptions | string | undefined,
+  timestampHeader: string | undefined,
+  rawRequestBody: string | Uint8Array | undefined,
+  signatureSecret: string | undefined,
+  positionalOptions: VerifyWebhookSignatureOptions | undefined,
+): { input: VerifyWebhookSignatureInput; options: VerifyWebhookSignatureOptions } {
+  if (typeof inputOrSignature === 'string') {
+    if (typeof optionsOrIdHeader !== 'string') {
+      throw new FluteWebhookError(
+        'verifyWebhookSignature(positional): `idHeader` is required and must be a string.',
+      );
+    }
+    if (typeof timestampHeader !== 'string') {
+      throw new FluteWebhookError(
+        'verifyWebhookSignature(positional): `timestampHeader` is required and must be a string.',
+      );
+    }
+    if (rawRequestBody === undefined) {
+      throw new FluteWebhookError(
+        'verifyWebhookSignature(positional): `rawRequestBody` is required.',
+      );
+    }
+    if (typeof signatureSecret !== 'string') {
+      throw new FluteWebhookError(
+        'verifyWebhookSignature(positional): `signatureSecret` is required and must be a string.',
+      );
+    }
+    return {
+      input: {
+        signatureHeader: inputOrSignature,
+        idHeader: optionsOrIdHeader,
+        timestampHeader,
+        rawRequestBody,
+        signatureSecret,
+      },
+      options: positionalOptions ?? {},
+    };
+  }
+  // The string overload is handled above; what we have left is *meant*
+  // to be the object form. TypeScript narrows `inputOrSignature` to the
+  // object branch but a JS caller can still pass `null` / `undefined`,
+  // so we keep the runtime guard. Cast to `unknown` first so the lint
+  // rule doesn't flag it as a redundant check.
+  const candidate: unknown = inputOrSignature;
+  if (candidate === null || typeof candidate !== 'object') {
+    throw new FluteWebhookError(
+      'verifyWebhookSignature: first argument must be the input object or the signatureHeader string.',
+    );
+  }
+  const opts: unknown = optionsOrIdHeader;
+  return {
+    input: candidate as VerifyWebhookSignatureInput,
+    options: typeof opts === 'object' && opts !== null ? opts : {},
+  };
+}
+
+function assertNonEmptyString(value: unknown, field: string): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new FluteWebhookError(
+      `verifyWebhookSignature: \`${field}\` is required and must be a non-empty string.`,
+    );
+  }
+}
+
+function assertRawBody(value: unknown): asserts value is string | Uint8Array {
+  if (typeof value === 'string') return;
+  if (value instanceof Uint8Array) return;
+  throw new FluteWebhookError(
+    'verifyWebhookSignature: `rawRequestBody` is required and must be a string or Uint8Array (the raw bytes — never the parsed JSON).',
+  );
+}
+
 function parseSignatureHeader(header: string): Buffer | undefined {
-  if (typeof header !== 'string' || header.length === 0) return undefined;
   const commaIndex = header.indexOf(',');
   if (commaIndex <= 0) return undefined;
   const scheme = header.slice(0, commaIndex);

@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { verifyWebhookSignature } from '../src/index.js';
+import { FluteWebhookError, verifyWebhookSignature, WebhooksNamespace } from '../src/index.js';
 
 function sign(secret: string, eventId: string, ts: number, body: string): string {
   const content = `${eventId}.${String(ts)}.${body}`;
@@ -105,46 +105,101 @@ describe('verifyWebhookSignature', () => {
     expect(ok).toBe(true);
   });
 
-  it('returns false on a malformed signature header', () => {
-    expect(
+  it('returns false on a malformed (but well-typed) signature header', () => {
+    // Per PRD §FR-4.3, signature-shape problems return false (the
+    // signature is *present* but cryptographically invalid). Throwing is
+    // reserved for missing/non-string parameters where verification can't
+    // even begin.
+    for (const sigHeader of ['not-a-signature', 'v2,abc', 'v1,not-base64-!!!']) {
+      expect(
+        verifyWebhookSignature({
+          signatureHeader: sigHeader,
+          idHeader: id,
+          timestampHeader: String(ts),
+          rawRequestBody: body,
+          signatureSecret: secret,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it('throws FluteWebhookError when a required parameter is missing or empty (FR-4.3)', () => {
+    const base = {
+      signatureHeader: 'v1,abc',
+      idHeader: id,
+      timestampHeader: String(ts),
+      rawRequestBody: body,
+      signatureSecret: secret,
+    };
+
+    expect(() => verifyWebhookSignature({ ...base, signatureHeader: '' })).toThrow(
+      FluteWebhookError,
+    );
+    expect(() => verifyWebhookSignature({ ...base, idHeader: '' })).toThrow(FluteWebhookError);
+    expect(() => verifyWebhookSignature({ ...base, timestampHeader: '' })).toThrow(
+      FluteWebhookError,
+    );
+    expect(() => verifyWebhookSignature({ ...base, signatureSecret: '' })).toThrow(
+      FluteWebhookError,
+    );
+    // Wrong type for raw body — caller probably passed a parsed JSON object.
+    expect(() =>
       verifyWebhookSignature({
-        signatureHeader: 'not-a-signature',
-        idHeader: id,
-        timestampHeader: String(ts),
-        rawRequestBody: body,
-        signatureSecret: secret,
+        ...base,
+        rawRequestBody: { hello: 'world' } as unknown as string,
       }),
-    ).toBe(false);
+    ).toThrow(FluteWebhookError);
+  });
+
+  it('supports the PRD-literal positional signature (5 args)', () => {
+    const sig = sign(secret, id, ts, body);
+    const ok = verifyWebhookSignature(sig, id, String(ts), body, secret, {
+      nowEpochSeconds: ts,
+    });
+    expect(ok).toBe(true);
+  });
+
+  it('throws FluteWebhookError when positional args are wrong (FR-4.3)', () => {
+    expect(() =>
+      // @ts-expect-error — intentionally calling with too few args
+      verifyWebhookSignature('v1,abc', undefined, String(ts), body, secret),
+    ).toThrow(FluteWebhookError);
+    expect(() =>
+      // @ts-expect-error — first arg is null
+      verifyWebhookSignature(null),
+    ).toThrow(FluteWebhookError);
+  });
+
+  it('exposes the same surface through flute.webhooks.verifySignature', () => {
+    const sig = sign(secret, id, ts, body);
+    const ns = new WebhooksNamespace();
 
     expect(
-      verifyWebhookSignature({
-        signatureHeader: 'v2,abc',
-        idHeader: id,
-        timestampHeader: String(ts),
-        rawRequestBody: body,
-        signatureSecret: secret,
-      }),
-    ).toBe(false);
+      ns.verifySignature(
+        {
+          signatureHeader: sig,
+          idHeader: id,
+          timestampHeader: String(ts),
+          rawRequestBody: body,
+          signatureSecret: secret,
+        },
+        { nowEpochSeconds: ts },
+      ),
+    ).toBe(true);
 
-    expect(
-      verifyWebhookSignature({
+    expect(ns.verifySignature(sig, id, String(ts), body, secret, { nowEpochSeconds: ts })).toBe(
+      true,
+    );
+
+    expect(() =>
+      ns.verifySignature({
         signatureHeader: '',
         idHeader: id,
         timestampHeader: String(ts),
         rawRequestBody: body,
         signatureSecret: secret,
       }),
-    ).toBe(false);
-
-    expect(
-      verifyWebhookSignature({
-        signatureHeader: 'v1,not-base64-!!!',
-        idHeader: id,
-        timestampHeader: String(ts),
-        rawRequestBody: body,
-        signatureSecret: secret,
-      }),
-    ).toBe(false);
+    ).toThrow(FluteWebhookError);
   });
 
   it('returns false when the timestamp is not numeric', () => {

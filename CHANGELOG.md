@@ -10,6 +10,23 @@ release. Manual edits should stay above the auto-generated section.
 
 ## [Unreleased]
 
+### Added — PRD v1.2 alignment pass
+- **Bug fix:** OAuth host corrected to the dedicated
+  `oauth.{uat,}.arise.risewithaurora.com` per PRD §FR-2.2 (the previous
+  `api.../identity` URL is 404 in UAT).
+- `FluteWebhookError` — thrown by `verifySignature` on missing or
+  malformed parameters (PRD §FR-4.3, §FR-5.4).
+- `verifyWebhookSignature` now also accepts the PRD-literal positional
+  form alongside the object form.
+- `Environment` const enum (`Environment.Sandbox` / `.Production`).
+- `tokenRefreshBufferSeconds` config option (default 60s).
+- `retryOn429` config option (default `false` — PRD §5.3 out-of-scope).
+- HTTPS enforced on every `baseUrls.*`; loopback hosts exempt.
+- Runnable examples: `02-list-transactions`, `03-payment-sessions`,
+  `04-error-handling`.
+- README "How to test it" section + the five ISV recipes mandated by
+  PRD §FR-8.4.
+
 ### Added — Phase 1 (live transport + every method wired)
 - **Auth** — `flute.sessions.{init, authenticate, getAccessToken,
   refreshAccessToken, clearStoredToken}` with OAuth 2.0

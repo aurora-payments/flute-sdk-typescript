@@ -100,6 +100,11 @@ export interface HttpClientOptions {
   readonly auth?: AuthProvider;
   /** Test-only override. Defaults to `globalThis.fetch`. */
   readonly fetchImpl?: typeof globalThis.fetch;
+  /**
+   * Whether to retry HTTP 429 responses honouring `Retry-After`.
+   * PRD §5.3 marks this as out-of-scope by default — flip on at your own risk.
+   */
+  readonly retryOn429: boolean;
 }
 
 /**
@@ -119,17 +124,21 @@ export interface HttpClientOptions {
  * @internal
  */
 export class HttpClient {
-  readonly #options: Required<Omit<HttpClientOptions, 'auth' | 'fetchImpl' | 'logger' | 'userAgentSuffix'>> & {
-    readonly auth: AuthProvider | undefined;
-    readonly fetchImpl: typeof globalThis.fetch;
-    readonly logger: HttpClientOptions['logger'];
-    readonly userAgentSuffix: string | undefined;
+  readonly #options: {
+    timeoutMs: number;
+    maxRetries: number;
+    retryOn429: boolean;
+    auth: AuthProvider | undefined;
+    fetchImpl: typeof globalThis.fetch;
+    logger: HttpClientOptions['logger'];
+    userAgentSuffix: string | undefined;
   };
 
   public constructor(options: HttpClientOptions) {
     this.#options = {
       timeoutMs: options.timeoutMs,
       maxRetries: options.maxRetries,
+      retryOn429: options.retryOn429,
       auth: options.auth,
       logger: options.logger,
       userAgentSuffix: options.userAgentSuffix,
@@ -160,7 +169,14 @@ export class HttpClient {
     for (;;) {
       const headers = await this.#withAuth(baseHeaders, options.skipAuth === true);
       try {
-        const response = await this.#fetchOnce(url, options.method, headers, body, timeoutMs, options.signal);
+        const response = await this.#fetchOnce(
+          url,
+          options.method,
+          headers,
+          body,
+          timeoutMs,
+          options.signal,
+        );
 
         if (response.status >= 200 && response.status < 300) {
           const parsed = await this.#parseSuccess<T>(response);
@@ -199,11 +215,13 @@ export class HttpClient {
         const payload = await this.#parseErrorPayload(response);
         throw mapApiError(response.status, payload, response.headers);
       } catch (err) {
-        if (err instanceof FluteApiError ||
-            err instanceof FluteAuthenticationError ||
-            err instanceof FluteValidationError ||
-            err instanceof FluteRateLimitError ||
-            err instanceof FluteIdempotencyError) {
+        if (
+          err instanceof FluteApiError ||
+          err instanceof FluteAuthenticationError ||
+          err instanceof FluteValidationError ||
+          err instanceof FluteRateLimitError ||
+          err instanceof FluteIdempotencyError
+        ) {
           throw err;
         }
         if (this.#isAbort(err)) {
@@ -271,7 +289,10 @@ export class HttpClient {
 
   #encodeBody(options: HttpRequestOptions): string | undefined {
     if (options.body === undefined) return undefined;
-    if (options.formUrlEncoded === true || options.contentType === 'application/x-www-form-urlencoded') {
+    if (
+      options.formUrlEncoded === true ||
+      options.contentType === 'application/x-www-form-urlencoded'
+    ) {
       const params = new URLSearchParams();
       for (const [k, v] of Object.entries(options.body as Record<string, unknown>)) {
         if (v === undefined || v === null) continue;
@@ -359,7 +380,8 @@ export class HttpClient {
   }
 
   #shouldRetry(status: number): boolean {
-    return status === 429 || status === 502 || status === 503 || status === 504;
+    if (status === 429) return this.#options.retryOn429;
+    return status === 502 || status === 503 || status === 504;
   }
 
   #backoff(attempt: number, retryAfterHeader: string | null): number {
@@ -408,7 +430,12 @@ export function mapApiError(
   status: number,
   payload: FluteApiErrorPayload | undefined,
   headers: Headers,
-): FluteAuthenticationError | FluteValidationError | FluteRateLimitError | FluteIdempotencyError | FluteApiError {
+):
+  | FluteAuthenticationError
+  | FluteValidationError
+  | FluteRateLimitError
+  | FluteIdempotencyError
+  | FluteApiError {
   const summary = errorSummary(status, payload);
   const requestId = headers.get('x-request-id') ?? undefined;
   const correlationId =
@@ -432,7 +459,11 @@ export function mapApiError(
     return new FluteIdempotencyError(summary, errorOptions);
   }
   if (status === 429) {
-    return new FluteRateLimitError(summary, parseRetryAfter(headers.get('retry-after')), errorOptions);
+    return new FluteRateLimitError(
+      summary,
+      parseRetryAfter(headers.get('retry-after')),
+      errorOptions,
+    );
   }
   return new FluteApiError(summary, payload, errorOptions);
 }

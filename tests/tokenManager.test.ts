@@ -27,6 +27,7 @@ function makeManager(extra?: { storage?: MemoryTokenStorage }): {
   const httpClient = new HttpClient({
     timeoutMs: 5_000,
     maxRetries: 0,
+    retryOn429: false,
     userAgentSuffix: undefined,
     logger: undefined,
   });

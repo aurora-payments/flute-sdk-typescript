@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-export { Flute } from './client.js';
+export { Flute, Environment } from './client.js';
 export type { FluteConfig, FluteEnvironment } from './client.js';
 export type { EnvironmentEndpoints } from './environment.js';
 
@@ -20,6 +20,7 @@ export {
   FluteRateLimitError,
   FluteIdempotencyError,
   FluteConfigurationError,
+  FluteWebhookError,
 } from './errors.js';
 export type { FluteErrorOptions, FluteApiErrorPayload } from './errors.js';
 
@@ -50,6 +51,7 @@ export type {
 export type { PaymentSettings } from './resources/settings.js';
 
 export { verifyWebhookSignature } from './webhooks/verifySignature.js';
+export { WebhooksNamespace } from './webhooks/namespace.js';
 export type {
   VerifyWebhookSignatureInput,
   VerifyWebhookSignatureOptions,

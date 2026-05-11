@@ -25,14 +25,18 @@ afterAll(() => {
   server.close();
 });
 
-function makeClient(overrides?: Partial<{
-  timeoutMs: number;
-  maxRetries: number;
-  auth: AuthProvider;
-}>): HttpClient {
+function makeClient(
+  overrides?: Partial<{
+    timeoutMs: number;
+    maxRetries: number;
+    retryOn429: boolean;
+    auth: AuthProvider;
+  }>,
+): HttpClient {
   return new HttpClient({
     timeoutMs: overrides?.timeoutMs ?? 5_000,
     maxRetries: overrides?.maxRetries ?? 0,
+    retryOn429: overrides?.retryOn429 ?? false,
     userAgentSuffix: undefined,
     logger: undefined,
     ...(overrides?.auth !== undefined ? { auth: overrides.auth } : {}),
@@ -148,7 +152,9 @@ describe('HttpClient — happy path', () => {
 
 describe('HttpClient — error mapping', () => {
   it('maps 401 to FluteAuthenticationError', async () => {
-    server.use(http.get(`${BASE}/x`, () => HttpResponse.json({ title: 'Unauthorized' }, { status: 401 })));
+    server.use(
+      http.get(`${BASE}/x`, () => HttpResponse.json({ title: 'Unauthorized' }, { status: 401 })),
+    );
     const client = makeClient();
     await expect(client.request({ method: 'GET', url: `${BASE}/x` })).rejects.toBeInstanceOf(
       FluteAuthenticationError,
@@ -180,14 +186,21 @@ describe('HttpClient — error mapping', () => {
     }
   });
 
-  it('maps 429 to FluteRateLimitError and honours Retry-After', async () => {
+  it('maps 429 to FluteRateLimitError and honours Retry-After (without retrying — PRD §5.3)', async () => {
+    let calls = 0;
     server.use(
-      http.get(`${BASE}/x`, () =>
-        HttpResponse.json({ title: 'Too many' }, { status: 429, headers: { 'Retry-After': '7' } }),
-      ),
+      http.get(`${BASE}/x`, () => {
+        calls += 1;
+        return HttpResponse.json(
+          { title: 'Too many' },
+          { status: 429, headers: { 'Retry-After': '7' } },
+        );
+      }),
     );
 
-    const client = makeClient();
+    // maxRetries=2 is irrelevant: retryOn429 defaults to false per the PRD,
+    // so the SDK fails fast and surfaces retryAfterMs to the caller.
+    const client = makeClient({ maxRetries: 2 });
     try {
       await client.request({ method: 'GET', url: `${BASE}/x` });
       throw new Error('expected to throw');
@@ -195,6 +208,31 @@ describe('HttpClient — error mapping', () => {
       expect(err).toBeInstanceOf(FluteRateLimitError);
       expect((err as FluteRateLimitError).retryAfterMs).toBe(7000);
     }
+    expect(calls).toBe(1);
+  });
+
+  it('opt-in retryOn429 retries the configured number of times', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${BASE}/x`, () => {
+        calls += 1;
+        if (calls < 3) {
+          return HttpResponse.json(
+            { title: 'Slow down' },
+            { status: 429, headers: { 'Retry-After': '0' } },
+          );
+        }
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    const client = makeClient({ maxRetries: 3, retryOn429: true });
+    const response = await client.request<{ ok: boolean }>({
+      method: 'GET',
+      url: `${BASE}/x`,
+    });
+    expect(response.data.ok).toBe(true);
+    expect(calls).toBe(3);
   });
 
   it('maps 500 to FluteApiError with correlation id', async () => {
@@ -247,9 +285,9 @@ describe('HttpClient — retries', () => {
     );
 
     const client = makeClient({ maxRetries: 5 });
-    await expect(client.request({ method: 'POST', url: `${BASE}/x`, body: {} })).rejects.toBeInstanceOf(
-      FluteValidationError,
-    );
+    await expect(
+      client.request({ method: 'POST', url: `${BASE}/x`, body: {} }),
+    ).rejects.toBeInstanceOf(FluteValidationError);
     expect(calls).toBe(1);
   });
 

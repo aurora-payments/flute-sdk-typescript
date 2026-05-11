@@ -13,9 +13,27 @@ import { resolveEnvironment, type EnvironmentEndpoints } from './environment.js'
 /**
  * Available Flute environments.
  *
+ * Accepted as a plain string literal everywhere the SDK takes one (the
+ * idiomatic TypeScript form), or via the {@link Environment} const enum
+ * for callers porting from other Flute SDKs that exposed `Environment.Sandbox`
+ * / `Environment.Production` (PRD §5.1, §6.1).
+ *
  * @public
  */
 export type FluteEnvironment = 'sandbox' | 'production';
+
+/**
+ * Named constants for {@link FluteEnvironment}. PRD §5.1 lists this as the
+ * canonical Developer-Experience surface; the string-literal form remains
+ * fully supported and is what most TypeScript users will reach for.
+ *
+ * @public
+ */
+export const Environment = {
+  Sandbox: 'sandbox',
+  Production: 'production',
+} as const satisfies Record<string, FluteEnvironment>;
+export type Environment = (typeof Environment)[keyof typeof Environment];
 
 /**
  * Configuration accepted by the {@link Flute} constructor.
@@ -48,15 +66,34 @@ export interface FluteConfig {
   readonly baseUrls?: Partial<EnvironmentEndpoints>;
 
   /**
-   * Per-request timeout in milliseconds. Default: 30_000 ms.
+   * Per-request timeout, in milliseconds. PRD §FR-6.3 mandates a default
+   * of 30_000 ms (30 seconds).
    */
   readonly timeoutMs?: number;
 
   /**
-   * Number of retries for retriable failures (5xx, 429, network errors).
-   * Default: 2 (so up to 3 attempts total).
+   * Number of retries for retriable failures: 5xx and network/timeout
+   * errors only (PRD §5.3 explicitly leaves 429 retry to the caller).
+   * Default: 2 (up to 3 attempts total).
    */
   readonly maxRetries?: number;
+
+  /**
+   * When true, the SDK additionally retries 429 responses honouring the
+   * `Retry-After` header. PRD §5.3 marks this as out of scope by default,
+   * so we ship it OFF; flip it on if your application has the budget for
+   * extra round-trips and you accept the latency cost.
+   * Default: `false`.
+   */
+  readonly retryOn429?: boolean;
+
+  /**
+   * Proactive token-refresh buffer, in **seconds** (PRD §FR-6.3). The
+   * SDK refreshes the cached access token this many seconds before its
+   * `expires_at` to avoid a 401 mid-flight.
+   * Default: `60`.
+   */
+  readonly tokenRefreshBufferSeconds?: number;
 
   /**
    * Pluggable token storage. Defaults to an in-memory store, which is fine
@@ -140,9 +177,31 @@ export class Flute {
     const baseUrls = resolveEnvironment(environment, config.baseUrls);
     const tokenStorage = config.tokenStorage ?? new MemoryTokenStorage();
 
+    if (
+      config.tokenRefreshBufferSeconds !== undefined &&
+      (!Number.isFinite(config.tokenRefreshBufferSeconds) || config.tokenRefreshBufferSeconds < 0)
+    ) {
+      throw new FluteConfigurationError(
+        '`tokenRefreshBufferSeconds` must be a non-negative finite number.',
+      );
+    }
+    if (
+      config.timeoutMs !== undefined &&
+      (!Number.isFinite(config.timeoutMs) || config.timeoutMs <= 0)
+    ) {
+      throw new FluteConfigurationError('`timeoutMs` must be a positive finite number.');
+    }
+    if (
+      config.maxRetries !== undefined &&
+      (!Number.isInteger(config.maxRetries) || config.maxRetries < 0)
+    ) {
+      throw new FluteConfigurationError('`maxRetries` must be a non-negative integer.');
+    }
+
     const httpClient = new HttpClient({
       timeoutMs: config.timeoutMs ?? 30_000,
       maxRetries: config.maxRetries ?? 2,
+      retryOn429: config.retryOn429 ?? false,
       userAgentSuffix: config.userAgentSuffix,
       logger: config.logger,
       ...(config.fetch !== undefined ? { fetchImpl: config.fetch } : {}),
@@ -154,6 +213,9 @@ export class Flute {
       oauthBaseUrl: baseUrls.oauth,
       storage: tokenStorage,
       http: httpClient,
+      ...(config.tokenRefreshBufferSeconds !== undefined
+        ? { proactiveRefreshSkewMs: Math.floor(config.tokenRefreshBufferSeconds * 1000) }
+        : {}),
     });
 
     httpClient.setAuth(tokenManager);
