@@ -10,6 +10,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# CI never makes commits, but `npm install` triggers the `prepare` script
+# which installs husky hooks; HUSKY=0 keeps the hook scripts inert if any
+# transient git operation runs (e.g. lint-staged backups).
+env:
+  HUSKY: 0
+
 permissions:
   contents: read
 
