@@ -8,6 +8,13 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# Disable husky in CI: hooks (lint-staged + commitlint) run locally on
+# pre-commit / commit-msg, and at PR time via the CI workflow. They must
+# stay out of the way of changesets/action, which crafts a non-Conventional
+# "Version Packages" commit that would otherwise fail commitlint.
+env:
+  HUSKY: 0
+
 permissions:
   contents: write
   pull-requests: write
