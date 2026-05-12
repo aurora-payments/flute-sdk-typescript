@@ -1,5 +1,5 @@
 ---
-'@getflute/sdk': minor
+'@flute-payments/sdk': minor
 ---
 
 Phase 1: full implementation of every method on the public surface.

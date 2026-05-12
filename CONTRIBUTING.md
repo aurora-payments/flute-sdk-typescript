@@ -1,4 +1,4 @@
-# Contributing to `@getflute/sdk`
+# Contributing to `@flute-payments/sdk`
 
 Thanks for your interest! This SDK is the reference implementation for
 all Flute server-side SDKs (Phase 1: TypeScript/Node.js per

@@ -1,4 +1,4 @@
-# `@getflute/sdk`
+# `@flute-payments/sdk`
 
 > **Status:** Phase 1 complete. Every method on the public surface is
 > wired and tested against the live API contracts. Track delivery in
@@ -56,7 +56,7 @@ multi-tenant credentials in a single instance.
 ## Install
 
 ```bash
-npm install @getflute/sdk
+npm install @flute-payments/sdk
 ```
 
 > Requires Node `>=20.19.0`.
@@ -64,7 +64,7 @@ npm install @getflute/sdk
 ## Quick start (auth + sale)
 
 ```ts
-import { Flute, Environment } from '@getflute/sdk';
+import { Flute, Environment } from '@flute-payments/sdk';
 
 const flute = new Flute({
   clientId: process.env.FLUTE_CLIENT_ID!,
@@ -150,7 +150,7 @@ deployments (Lambdas, K8s, Cloud Run) plug in your own store via
 [See **`examples/05-webhook-verification.ts`**](./examples/05-webhook-verification.ts).
 
 ```ts
-import { FluteWebhookError } from '@getflute/sdk';
+import { FluteWebhookError } from '@flute-payments/sdk';
 
 app.post('/flute/webhooks', express.raw({ type: '*/*' }), (req, res) => {
   try {
@@ -206,7 +206,7 @@ console.log(`${all.length} transactions / ${response.total} server-side`);
 ### 5. Void a transaction
 
 ```ts
-import { FluteApiError, FluteIdempotencyError } from '@getflute/sdk';
+import { FluteApiError, FluteIdempotencyError } from '@flute-payments/sdk';
 
 try {
   const voided = await flute.transactions.void('txn_123');
@@ -301,11 +301,11 @@ Reproduces what an ISV gets from `npm install`:
 
 ```bash
 npm run build
-npm pack                           # produces getflute-sdk-0.0.0.tgz
+npm pack                           # produces flute-payments-sdk-0.0.0.tgz
 mkdir /tmp/flute-smoke && cd /tmp/flute-smoke
 npm init -y
-npm install /path/to/getflute-sdk-0.0.0.tgz
-node -e "console.log(require('@getflute/sdk').getVersion())"
+npm install /path/to/flute-payments-sdk-0.0.0.tgz
+node -e "console.log(require('@flute-payments/sdk').getVersion())"
 ```
 
 If you want to use it as a Git dependency (pre-release or fork):
@@ -515,7 +515,7 @@ and vice-versa. Provision each pair from the matching dashboard.
 ### Sandbox
 
 ```ts
-import { Environment, Flute } from '@getflute/sdk';
+import { Environment, Flute } from '@flute-payments/sdk';
 
 const flute = new Flute({
   clientId: process.env.FLUTE_CLIENT_ID!,
@@ -539,7 +539,7 @@ scenarios — copy them from the merchant test guide.
 ### Production
 
 ```ts
-import { Environment, Flute } from '@getflute/sdk';
+import { Environment, Flute } from '@flute-payments/sdk';
 
 const flute = new Flute({
   clientId: process.env.FLUTE_CLIENT_ID!,
@@ -605,7 +605,7 @@ Every error thrown by this SDK extends `FluteError`. Discriminate on the
 subclass for actionable handling:
 
 ```ts
-import { FluteApiError, FluteRateLimitError, FluteValidationError } from '@getflute/sdk';
+import { FluteApiError, FluteRateLimitError, FluteValidationError } from '@flute-payments/sdk';
 
 try {
   await flute.transactions.sale({

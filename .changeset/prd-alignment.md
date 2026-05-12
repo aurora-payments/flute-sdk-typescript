@@ -1,5 +1,5 @@
 ---
-'@getflute/sdk': minor
+'@flute-payments/sdk': minor
 ---
 
 PRD v1.2 alignment pass — closes the gaps that surfaced when auditing
