@@ -147,3 +147,17 @@ export class FluteRateLimitError extends FluteError {
  * @public
  */
 export class FluteIdempotencyError extends FluteError {}
+
+/**
+ * Raised by the webhook helper when verification cannot even be attempted —
+ * i.e. one of the required headers / parameters is missing, blank, or
+ * structurally invalid (PRD §FR-4.3, §FR-5.4).
+ *
+ * Note: a *valid-shape but cryptographically wrong* signature does NOT
+ * raise this error; {@link verifyWebhookSignature} returns `false`
+ * instead. Use this distinction to decide whether to log a 400 (caller
+ * mistake) vs a 401 (signature mismatch / replay).
+ *
+ * @public
+ */
+export class FluteWebhookError extends FluteError {}

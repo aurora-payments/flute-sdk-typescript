@@ -15,15 +15,15 @@
     "aurora",
     "aurora-payments"
   ],
-  "homepage": "https://github.com/flute-payments/flute-sdk-typescript#readme",
+  "homepage": "https://github.com/aurora-payments/flute-sdk-typescript#readme",
   "bugs": {
-    "url": "https://github.com/flute-payments/flute-sdk-typescript/issues"
+    "url": "https://github.com/aurora-payments/flute-sdk-typescript/issues"
   },
   "license": "MIT",
   "author": "Aurora Payments / Flute",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/flute-payments/flute-sdk-typescript.git"
+    "url": "git+https://github.com/aurora-payments/flute-sdk-typescript.git"
   },
   "type": "module",
   "main": "./dist/index.cjs",
@@ -44,7 +44,7 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=18.17.0"
+    "node": ">=20.19.0"
   },
   "publishConfig": {
     "access": "public",
@@ -79,6 +79,7 @@
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.3",
+    "msw": "^2.14.5",
     "openapi-typescript": "^7.13.0",
     "prettier": "^3.8.3",
     "rimraf": "^6.1.3",

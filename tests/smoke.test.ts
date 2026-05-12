@@ -1,15 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  Environment,
   Flute,
+  FluteApiError,
   FluteAuthenticationError,
   FluteConfigurationError,
   FluteError,
+  FluteIdempotencyError,
+  FluteNetworkError,
+  FluteRateLimitError,
+  FluteValidationError,
+  FluteWebhookError,
   MemoryTokenStorage,
+  Sessions,
   getVersion,
 } from '../src/index.js';
 
-describe('Phase 0 smoke tests', () => {
+describe('Construction', () => {
   it('exports Flute as a constructor', () => {
     expect(typeof Flute).toBe('function');
   });
@@ -34,42 +42,141 @@ describe('Phase 0 smoke tests', () => {
     ).toThrow(FluteConfigurationError);
   });
 
-  it('defaults to sandbox environment', () => {
+  it('defaults to sandbox environment with the right OAuth host (PRD §FR-2.2)', () => {
     const flute = new Flute({ clientId: 'cid', clientSecret: 'shh' });
     expect(flute.environment).toBe('sandbox');
+    expect(flute.baseUrls.isvApi).toBe('https://api.uat.arise.risewithaurora.com/isv-api');
+    expect(flute.baseUrls.oauth).toBe('https://oauth.uat.arise.risewithaurora.com');
   });
 
-  it('respects the explicit environment', () => {
+  it('uses the production OAuth host when environment is production', () => {
     const flute = new Flute({
       clientId: 'cid',
       clientSecret: 'shh',
-      environment: 'production',
+      environment: Environment.Production,
     });
     expect(flute.environment).toBe('production');
+    expect(flute.baseUrls.isvApi).toBe('https://api.arise.risewithaurora.com/isv-api');
+    expect(flute.baseUrls.oauth).toBe('https://oauth.arise.risewithaurora.com');
   });
 
-  it('exposes the four namespaces as public properties', () => {
+  it('honours per-environment URL overrides', () => {
+    const flute = new Flute({
+      clientId: 'cid',
+      clientSecret: 'shh',
+      baseUrls: {
+        isvApi: 'https://example.test/isv-api/',
+      },
+    });
+    expect(flute.baseUrls.isvApi).toBe('https://example.test/isv-api');
+  });
+
+  it('rejects non-HTTPS base URLs except loopback (NFR-1)', () => {
+    expect(
+      () =>
+        new Flute({
+          clientId: 'cid',
+          clientSecret: 'shh',
+          baseUrls: { isvApi: 'http://api.example.com' },
+        }),
+    ).toThrow(FluteConfigurationError);
+
+    // Loopback HTTP is allowed for tests / contract servers.
+    const flute = new Flute({
+      clientId: 'cid',
+      clientSecret: 'shh',
+      baseUrls: {
+        isvApi: 'http://localhost:9000',
+        payIntApi: 'http://127.0.0.1:9001',
+        oauth: 'http://localhost:9002',
+      },
+    });
+    expect(flute.baseUrls.isvApi).toBe('http://localhost:9000');
+  });
+
+  it('rejects malformed base URLs', () => {
+    expect(
+      () =>
+        new Flute({
+          clientId: 'cid',
+          clientSecret: 'shh',
+          baseUrls: { isvApi: 'not a url' },
+        }),
+    ).toThrow(FluteConfigurationError);
+  });
+
+  it('validates timeout / retries / refresh-buffer numeric inputs', () => {
+    expect(() => new Flute({ clientId: 'c', clientSecret: 's', timeoutMs: -1 })).toThrow(
+      FluteConfigurationError,
+    );
+    expect(() => new Flute({ clientId: 'c', clientSecret: 's', maxRetries: -1 })).toThrow(
+      FluteConfigurationError,
+    );
+    expect(() => new Flute({ clientId: 'c', clientSecret: 's', maxRetries: 1.5 })).toThrow(
+      FluteConfigurationError,
+    );
+    expect(
+      () =>
+        new Flute({
+          clientId: 'c',
+          clientSecret: 's',
+          tokenRefreshBufferSeconds: -10,
+        }),
+    ).toThrow(FluteConfigurationError);
+  });
+
+  it('exposes Environment as a typed const enum', () => {
+    expect(Environment.Sandbox).toBe('sandbox');
+    expect(Environment.Production).toBe('production');
+    const flute = new Flute({
+      clientId: 'c',
+      clientSecret: 's',
+      environment: Environment.Sandbox,
+    });
+    expect(flute.environment).toBe('sandbox');
+  });
+
+  it('exposes all five namespaces as public properties', () => {
     const flute = new Flute({ clientId: 'cid', clientSecret: 'shh' });
+    expect(flute.sessions).toBeInstanceOf(Sessions);
     expect(flute.transactions).toBeDefined();
     expect(flute.paymentSessions).toBeDefined();
     expect(flute.settings).toBeDefined();
     expect(flute.webhooks).toBeDefined();
   });
+});
 
-  it('error subclasses are instanceof FluteError', () => {
-    const cfg = new FluteConfigurationError('bad');
-    const auth = new FluteAuthenticationError('401');
-    expect(cfg).toBeInstanceOf(FluteError);
-    expect(auth).toBeInstanceOf(FluteError);
+describe('Error hierarchy', () => {
+  it('every subclass is instanceof FluteError', () => {
+    expect(new FluteConfigurationError('x')).toBeInstanceOf(FluteError);
+    expect(new FluteAuthenticationError('x')).toBeInstanceOf(FluteError);
+    expect(new FluteApiError('x', undefined)).toBeInstanceOf(FluteError);
+    expect(new FluteValidationError('x', undefined)).toBeInstanceOf(FluteError);
+    expect(new FluteNetworkError('x')).toBeInstanceOf(FluteError);
+    expect(new FluteRateLimitError('x', undefined)).toBeInstanceOf(FluteError);
+    expect(new FluteIdempotencyError('x')).toBeInstanceOf(FluteError);
+    expect(new FluteWebhookError('x')).toBeInstanceOf(FluteError);
   });
 
-  it('reports a non-empty SDK version', () => {
-    const v = getVersion();
-    expect(typeof v).toBe('string');
-    expect(v.length).toBeGreaterThan(0);
+  it('preserves request and correlation ids', () => {
+    const err = new FluteApiError(
+      'Boom',
+      { errorCode: 'X1' },
+      {
+        httpStatus: 500,
+        requestId: 'req_1',
+        correlationId: 'corr_1',
+      },
+    );
+    expect(err.httpStatus).toBe(500);
+    expect(err.requestId).toBe('req_1');
+    expect(err.correlationId).toBe('corr_1');
+    expect(err.errorCode).toBe('X1');
   });
+});
 
-  it('MemoryTokenStorage round-trips a token', async () => {
+describe('MemoryTokenStorage', () => {
+  it('round-trips a token', async () => {
     const store = new MemoryTokenStorage();
     await store.set('k', { accessToken: 't', expiresAt: Date.now() + 60_000 });
     expect(await store.get('k')).toMatchObject({ accessToken: 't' });
@@ -77,29 +184,19 @@ describe('Phase 0 smoke tests', () => {
     expect(await store.get('k')).toBeUndefined();
   });
 
-  it('MemoryTokenStorage evicts expired tokens lazily', async () => {
+  it('keeps expired tokens — TokenManager owns lifetime decisions', async () => {
+    // The storage is intentionally a dumb container so a refresh_token
+    // remains accessible even after the access_token has expired.
     const store = new MemoryTokenStorage();
     await store.set('k', { accessToken: 't', expiresAt: Date.now() - 1 });
-    expect(await store.get('k')).toBeUndefined();
+    expect(await store.get('k')).toMatchObject({ accessToken: 't' });
   });
+});
 
-  it('Phase 0 placeholder methods reject with a clear message', async () => {
-    const flute = new Flute({ clientId: 'cid', clientSecret: 'shh' });
-    await expect(flute.transactions.list()).rejects.toThrow(/not implemented/i);
-    await expect(flute.paymentSessions.create()).rejects.toThrow(/not implemented/i);
-    await expect(flute.settings.getPaymentSettings()).rejects.toThrow(/not implemented/i);
-  });
-
-  it('verifyWebhookSignature throws not-implemented in Phase 0', () => {
-    const flute = new Flute({ clientId: 'cid', clientSecret: 'shh' });
-    expect(() =>
-      flute.webhooks.verifySignature({
-        signatureHeader: 'sig',
-        idHeader: 'id',
-        timestampHeader: '0',
-        rawRequestBody: '',
-        signatureSecret: 's',
-      }),
-    ).toThrow(/not implemented/i);
+describe('Version', () => {
+  it('reports a non-empty SDK version', () => {
+    const v = getVersion();
+    expect(typeof v).toBe('string');
+    expect(v.length).toBeGreaterThan(0);
   });
 });

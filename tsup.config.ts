@@ -5,9 +5,7 @@ interface PkgJson {
   readonly version: string;
 }
 
-const pkg = JSON.parse(
-  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
-) as PkgJson;
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as PkgJson;
 
 export default defineConfig({
   entry: ['src/index.ts'],
@@ -18,7 +16,7 @@ export default defineConfig({
   minify: false,
   splitting: false,
   treeshake: true,
-  target: 'node18',
+  target: 'node20',
   outDir: 'dist',
   outExtension({ format }) {
     return {

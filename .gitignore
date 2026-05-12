@@ -53,8 +53,9 @@ lerna-debug.log*
 .vercel/
 .netlify/
 
-# Generated artifacts
-src/types/generated/
+# Generated artifacts (committed where they are first-class source)
+# Note: src/types/generated/ IS committed — it's the SDK's typed source surface
+# generated from openapi/*.json. CI verifies it stays in sync with the spec.
 docs-site/
 typedoc/
 

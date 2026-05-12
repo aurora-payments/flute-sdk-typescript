@@ -1,21 +1,17 @@
-import type { TokenStorage } from '../auth/storage.js';
 import type { EnvironmentEndpoints } from '../environment.js';
-import type { FluteEnvironment } from '../client.js';
+import type { HttpClient } from '../internal/http.js';
 
 /**
  * Subset of the resolved client config that resources need.
- * Kept narrow to make resources easy to test in isolation.
+ *
+ * The HTTP client carries timeouts, retries, the user-agent suffix, the
+ * logger, and (once wired) the auth provider — so resources don't have
+ * to know any of that. Resources stay narrow: they describe endpoints
+ * and types, the transport is somebody else's problem.
  *
  * @internal
  */
 export interface ResourceConfig {
-  readonly clientId: string;
-  readonly clientSecret: string;
-  readonly environment: FluteEnvironment;
   readonly baseUrls: EnvironmentEndpoints;
-  readonly timeoutMs: number;
-  readonly maxRetries: number;
-  readonly tokenStorage: TokenStorage;
-  readonly logger: Pick<Console, 'debug' | 'info' | 'warn' | 'error'> | undefined;
-  readonly userAgentSuffix: string | undefined;
+  readonly http: HttpClient;
 }
