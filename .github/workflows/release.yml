@@ -18,7 +18,7 @@ env:
 permissions:
   contents: write
   pull-requests: write
-  id-token: write # required for npm provenance
+  id-token: write # required for npm provenance + Trusted Publisher OIDC
 
 jobs:
   release:
@@ -42,6 +42,12 @@ jobs:
       - name: Verify (lint • typecheck • test • build)
         run: npm run verify
 
+      # Authenticates to npm via OIDC (Trusted Publisher), not a long-lived
+      # token. The publisher is registered at the package level on npm:
+      # https://www.npmjs.com/package/@flute-payments/sdk/access
+      # Org: aurora-payments · Repo: flute-sdk-typescript · Workflow: release.yml
+      # As long as those three match, npm accepts the publish + provenance
+      # attestation produced by `id-token: write` above.
       - name: Create release PR or publish
         uses: changesets/action@v1
         with:
@@ -49,4 +55,3 @@ jobs:
           publish: npm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
