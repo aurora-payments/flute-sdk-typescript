@@ -1,6 +1,6 @@
 {
   "name": "@flute-payments/sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Official server-side TypeScript/Node.js SDK for the Flute payment platform.",
   "keywords": [
     "flute",
