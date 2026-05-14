@@ -42,21 +42,25 @@ describe('Construction', () => {
     ).toThrow(FluteConfigurationError);
   });
 
-  it('defaults to sandbox environment with the right OAuth host (PRD §FR-2.2)', () => {
+  it('defaults to sandbox environment with the right hosts (PRD §FR-2.2)', () => {
     const flute = new Flute({ clientId: 'cid', clientSecret: 'shh' });
     expect(flute.environment).toBe('sandbox');
-    expect(flute.baseUrls.isvApi).toBe('https://api.uat.arise.risewithaurora.com/isv-api');
+    // Regression guard: the ISV BFF endpoints are served at the API host
+    // root, NOT under `/isv-api/`. See comment in `src/environment.ts`.
+    expect(flute.baseUrls.isvApi).toBe('https://api.uat.arise.risewithaurora.com');
+    expect(flute.baseUrls.payIntApi).toBe('https://api.uat.arise.risewithaurora.com/pay-int-api');
     expect(flute.baseUrls.oauth).toBe('https://oauth.uat.arise.risewithaurora.com');
   });
 
-  it('uses the production OAuth host when environment is production', () => {
+  it('uses the production hosts when environment is production', () => {
     const flute = new Flute({
       clientId: 'cid',
       clientSecret: 'shh',
       environment: Environment.Production,
     });
     expect(flute.environment).toBe('production');
-    expect(flute.baseUrls.isvApi).toBe('https://api.arise.risewithaurora.com/isv-api');
+    expect(flute.baseUrls.isvApi).toBe('https://api.arise.risewithaurora.com');
+    expect(flute.baseUrls.payIntApi).toBe('https://api.arise.risewithaurora.com/pay-int-api');
     expect(flute.baseUrls.oauth).toBe('https://oauth.arise.risewithaurora.com');
   });
 

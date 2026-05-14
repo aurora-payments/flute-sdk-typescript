@@ -3,7 +3,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { Flute } from '../src/index.js';
 import { http, HttpResponse, makeServer } from './_helpers/server.js';
 
-const ISV_BASE = 'https://example.test/isv-api';
+// The ISV BFF endpoints live at the API host root, NOT under /isv-api.
+// Mirror that in the test fixtures so a future regression that brings
+// the prefix back fails this suite as well.
+const ISV_BASE = 'https://example.test';
 const PAY_INT_BASE = 'https://example.test/pay-int-api';
 const OAUTH_BASE = 'https://example.test/identity';
 

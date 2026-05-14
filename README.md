@@ -493,10 +493,10 @@ The SDK ships with two named environments. The token endpoint is always
 URL except `localhost` / `127.0.0.1` / `[::1]`, which the SDK accepts
 over plain HTTP for local development.
 
-| Environment  | ISV API                                            | Pay-Int API                                            | OAuth                                        |
-| ------------ | -------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------- |
-| `sandbox`    | `https://api.uat.arise.risewithaurora.com/isv-api` | `https://api.uat.arise.risewithaurora.com/pay-int-api` | `https://oauth.uat.arise.risewithaurora.com` |
-| `production` | `https://api.arise.risewithaurora.com/isv-api`     | `https://api.arise.risewithaurora.com/pay-int-api`     | `https://oauth.arise.risewithaurora.com`     |
+| Environment  | ISV API                                    | Pay-Int API                                            | OAuth                                        |
+| ------------ | ------------------------------------------ | ------------------------------------------------------ | -------------------------------------------- |
+| `sandbox`    | `https://api.uat.arise.risewithaurora.com` | `https://api.uat.arise.risewithaurora.com/pay-int-api` | `https://oauth.uat.arise.risewithaurora.com` |
+| `production` | `https://api.arise.risewithaurora.com`     | `https://api.arise.risewithaurora.com/pay-int-api`     | `https://oauth.arise.risewithaurora.com`     |
 
 ### When to use which
 
@@ -566,7 +566,7 @@ const flute = new Flute({
   clientSecret: 'local-dev-secret',
   environment: 'sandbox', // ignored when every baseUrls.* is set, but required
   baseUrls: {
-    isvApi: 'http://localhost:5001/isv-api',
+    isvApi: 'http://localhost:5001',
     payIntApi: 'http://localhost:5002/pay-int-api',
     oauth: 'http://localhost:5003', // Identity Service base
   },
@@ -589,7 +589,7 @@ const flute = new Flute({
   clientId: '…',
   clientSecret: '…',
   baseUrls: {
-    isvApi: 'https://api.preview-foo.arise.risewithaurora.com/isv-api',
+    isvApi: 'https://api.preview-foo.arise.risewithaurora.com',
     payIntApi: 'https://api.preview-foo.arise.risewithaurora.com/pay-int-api',
     oauth: 'https://oauth.preview-foo.arise.risewithaurora.com',
   },

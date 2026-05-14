@@ -24,17 +24,27 @@ export interface EnvironmentEndpoints {
   readonly oauth: string;
 }
 
-// Confirmed by the PRD §FR-2.2 and verified live (2026-05-11): the
-// Identity Service is exposed on a dedicated `oauth.*` host, NOT under
-// `/identity` on the API host. The path appended is /oauth2/token.
+// Verified live against UAT (2026-05-14): the ISV BFF endpoints are
+// served under the API host root with the `/v2/...` paths declared in
+// `openapi/isv-api-v2.json` (e.g. `/v2/transactions`,
+// `/v2/settings/payment-config`). The `/isv-api/` segment that appears
+// in URLs like
+// `api.uat.arise.risewithaurora.com/isv-api/swagger/v2/swagger.json`
+// is the path of the **Swagger UI**, not a prefix of the API itself.
+// Earlier defaults (0.1.0 → 0.1.2) included `/isv-api` here; that was
+// a misread of the Swagger UI URL and produced `404 Not Found` on
+// every call to `transactions.*` and `settings.*` against the live
+// host. The Payment Integrations API is the opposite case: it really
+// is mounted under `/pay-int-api/`, and the OAuth host is a dedicated
+// `oauth.*` subdomain (PRD §FR-2.2; token endpoint is /oauth2/token).
 const SANDBOX_DEFAULTS: EnvironmentEndpoints = {
-  isvApi: 'https://api.uat.arise.risewithaurora.com/isv-api',
+  isvApi: 'https://api.uat.arise.risewithaurora.com',
   payIntApi: 'https://api.uat.arise.risewithaurora.com/pay-int-api',
   oauth: 'https://oauth.uat.arise.risewithaurora.com',
 };
 
 const PRODUCTION_DEFAULTS: EnvironmentEndpoints = {
-  isvApi: 'https://api.arise.risewithaurora.com/isv-api',
+  isvApi: 'https://api.arise.risewithaurora.com',
   payIntApi: 'https://api.arise.risewithaurora.com/pay-int-api',
   oauth: 'https://oauth.arise.risewithaurora.com',
 };
